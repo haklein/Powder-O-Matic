@@ -51,9 +51,14 @@
 #define MOTB_DIR 5
 #define MOTB_STEP 3
 #define MOTB_ENA 6
-#define MOTB_MSTEPS 32
+#define MOTB_MSTEPS 2
 #define MOTB_SERIAL Serial3
 #define MOTB_CURRENT_MA 300
+
+#define THROWER_POSITION 170
+#define THROWER_DELAY 300
+#define THROWER_ENABLED true
+
 
 // baudrates
 #define TMC2208_BAUDRATE 460800
@@ -198,9 +203,7 @@ void setup() {
   //   stepperA.runToPosition();
 
   stepperB.setMaxSpeed(20000000);
-  stepperB.setAcceleration(2000);
-  //stepperB.moveTo(200 * MOTB_MSTEPS);
-  // stepperB.runToPosition();
+  stepperB.setAcceleration(5000);
 
   //setup Timer5 for stepper A steps
   /*
@@ -232,6 +235,14 @@ void setup() {
   }
 */
 
+void throwPowder() {
+  stepperB.moveTo(THROWER_POSITION * MOTB_MSTEPS);
+  stepperB.runToPosition();
+  delay(THROWER_DELAY);
+  stepperB.moveTo(0 * MOTB_MSTEPS);
+  stepperB.runToPosition();
+  
+}
 
 // derive motor speed from value
 uint32_t speedFromValue(float currentValue, float targetValue) {
@@ -400,6 +411,7 @@ void loop() {
         startTimestamp = millis();
         currentState = MASSFILL_FAST;
         driverA.VACTUAL(speedFromValue(value, targetValue));
+        if (THROWER_ENABLED) throwPowder();
       }
       break;
     case MASSFILL_FAST:
