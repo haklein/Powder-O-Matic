@@ -61,6 +61,12 @@
 #define THROWER_DELAY 300
 #define THROWER_ENABLED true
 
+#define BUZZER_PIN -1
+#define BUZZER_SUCCESS_FREQ 2000
+#define BUZZER_SUCCESS_DURATION 500
+#define BUZZER_ERROR_FREQ 4000
+#define BUZZER_ERROR_DURATION 300
+#define BUZZER_ERROR_BEEP_COUNT 5
 
 // baudrates
 #define TMC2208_BAUDRATE 460800
@@ -427,22 +433,26 @@ void loop() {
       Serial.print("Total time: ");
       Serial.println((millis() - startTimestamp) / 1000);
       delay(2000);;
-      if (readScaleStable(&value) == 1) {
-        if (abs(targetValue - value) < TRICKLE_DELTA) {
-          // success
-          // todo: beep
+      while (readScaleStableOrUnstable(&value) != 1);
+      if (value < targetValue + TRICKLE_DELTA) {
+        // success
+#ifdef BUZZER_PIN
+        tone(BUZZER_PIN, BUZZER_SUCCESS_FREQ, BUZZER_SUCCESS_DURATION);
+#endif
+        currentState = IDLE;
+      } else {
+        currentState = ERROR;
 
-          currentState = IDLE;
-        } else {
-          currentState = ERROR;
-        }
       }
-
-
       break;
     case ERROR:
       Serial.println("STATE:ERROR");
-      // todo: error beep
+      for (int i = 0; i < BUZZER_ERROR_BEEP_COUNT; i++) {
+#ifdef BUZZER_PIN
+        tone(BUZZER_PIN, BUZZER_ERROR_FREQ, BUZZER_ERROR_DURATION);
+#endif
+        delay(300);
+      }
       if (digitalRead(K040_SW) == LOW)
         currentState = IDLE;
       break;
