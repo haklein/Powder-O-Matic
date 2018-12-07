@@ -197,43 +197,9 @@ void setup() {
     Serial.println(data, HEX);
   }
 
-  //stepperA.setMaxSpeed(20000000);
-  //stepperA.setAcceleration(1000);
-  //  stepperA.moveTo(5000);
-  //   stepperA.runToPosition();
-
   stepperB.setMaxSpeed(20000000);
   stepperB.setAcceleration(5000);
-
-  //setup Timer5 for stepper A steps
-  /*
-      CS12  CS11  CS10
-         0     0     0    - Stop timer/counter
-         0     0     1    - No Prescaler
-         0     1     0    - Divide clock by 8
-         0     1     1    - by 64
-         1     0     0    - by 256
-         1     0     1    - by 1024
-          1     1     0    - inc falling
-         1     1     1    - inc rising
-  */
-
-  /*
-    TCCR5B = 0b00001101;     // clear timer counter on compare, CS12-CS10 == 1024 divisor
-    TCCR5A = 0b00000000; // no pwm
-
-    TIMSK5 |= 0b00000010;    // set for output compare interrupt
-    sei();                   // enable interrups
-  */
 }
-/*
-  // timer interrupt to toggle direction output for stepper A
-  ISR(TIMER5_COMPA_vect) {
-  if (turn) {
-    digitalWrite(MOTA_STEP,  !digitalRead(MOTA_STEP));
-  }
-  }
-*/
 
 void throwPowder() {
   stepperB.moveTo(THROWER_POSITION * MOTB_MSTEPS);
