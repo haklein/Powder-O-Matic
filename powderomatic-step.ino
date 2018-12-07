@@ -35,6 +35,8 @@
 #define MOTA_SPEED_MAX 210000
 #define MOTA_SPEED_MIN 15000
 
+#define AUTOMODE true
+
 #define debug 20
 
 // trickler stepper setup
@@ -207,7 +209,7 @@ void throwPowder() {
   delay(THROWER_DELAY);
   stepperB.moveTo(0 * MOTB_MSTEPS);
   stepperB.runToPosition();
-  
+
 }
 
 // derive motor speed from value
@@ -362,8 +364,9 @@ void loop() {
   switch (currentState) {
     case IDLE:
       Serial.println("STATE:IDLE");
+      readScaleStableOrUnstable(&value);
 
-      if (digitalRead(K040_SW) == LOW) {
+      if ((digitalRead(K040_SW) == LOW) || (AUTOMODE && (value < 0.1 && value > -0.1)) ) {
         currentState = WAIT_FOR_TARE;
         updateDisplay();
         taraScale();
@@ -423,17 +426,25 @@ void loop() {
       Serial.println("STATE:FINISHED");
       Serial.print("Total time: ");
       Serial.println((millis() - startTimestamp) / 1000);
-      delay(5000);
-      if (digitalRead(K040_SW) == LOW) {
-        currentState = IDLE;
-      } else if (readScaleStableOrUnstable(&value) == 1) {
-        if (value < 1 && value > -1)
+      delay(2000);;
+      if (readScaleStable(&value) == 1) {
+        if (abs(targetValue - value) < TRICKLE_DELTA) {
+          // success
+          // todo: beep
+
           currentState = IDLE;
+        } else {
+          currentState = ERROR;
+        }
       }
+
+
       break;
     case ERROR:
       Serial.println("STATE:ERROR");
-      turn = false;
+      // todo: error beep
+      if (digitalRead(K040_SW) == LOW)
+        currentState = IDLE;
       break;
     default:
       break;
