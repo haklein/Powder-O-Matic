@@ -14,3 +14,4 @@ The default values are set up for grain.
 The KY-040 is evaluated by attaching a pin interrupt to the CLK signal (rotaryIsr())
 The Stepper A is being turned via UART commands. Stepper B uses the AccelStep library.
 
+Operation can be seen here: https://youtu.be/FhTphJCxM40
