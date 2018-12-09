@@ -12,6 +12,5 @@ value. The Kern scale needs to be configured for command mode ("rE Cr") with 192
 The default values are set up for grain.
   
 The KY-040 is evaluated by attaching a pin interrupt to the CLK signal (rotaryIsr())
-The Stepper A is being turned via a timer interrupt (timer 5). Speed is adjusted by the
-microsteps() function of the TMC2208Stepper library.
+The Stepper A is being turned via UART commands. Stepper B uses the AccelStep library.
 
