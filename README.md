@@ -1,5 +1,5 @@
-Powder'O'Matic Readme
-=====================
+Powder'O'Matic Step Readme
+==========================
 
 ## Overview
 
@@ -15,3 +15,6 @@ The KY-040 is evaluated by attaching a pin interrupt to the CLK signal (rotaryIs
 The Stepper A is being turned via UART commands. Stepper B uses the AccelStep library.
 
 Operation can be seen here: https://youtu.be/FhTphJCxM40
+
+The Autotrickler hardware (trickler and stepper motor adapter for the Lee Powder Thrower)
+can be bought here: https://www.autotrickler.com
