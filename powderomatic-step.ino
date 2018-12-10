@@ -114,15 +114,19 @@ bool automaticModeEnabled = AUTOMODE;
 void rotaryISR() {
   static unsigned long lastInterruptTime = 0;
   unsigned long interruptTime = millis();
+  unsigned long delta = millis() - lastInterruptTime;
+  int multi = sq(500-min(delta,500))/25000 +1;
 
   // debounce 5ms
-  if (interruptTime - lastInterruptTime > ROTARY_DEBOUNCE_MILLIS) {
+  if (delta > ROTARY_DEBOUNCE_MILLIS) {
+
     if (digitalRead(K040_DT) == LOW)
     {
-      targetValue = targetValue - ROTARY_DELTA_VALUE;
+      targetValue = targetValue - ROTARY_DELTA_VALUE * multi;
     }
     else {
-      targetValue = targetValue + ROTARY_DELTA_VALUE;
+
+      targetValue = targetValue + ROTARY_DELTA_VALUE * multi;
     }
     lastInterruptTime = interruptTime;
   }
