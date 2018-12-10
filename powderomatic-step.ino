@@ -35,7 +35,7 @@
 #define MOTA_SPEED_MAX 210000
 #define MOTA_SPEED_MIN 15000
 
-#define AUTOMODE true
+#define AUTOMODE false
 
 #define debug 20
 
@@ -66,6 +66,7 @@
 #define BUZZER_SUCCESS_DURATION 500
 #define BUZZER_ERROR_FREQ 4000
 #define BUZZER_ERROR_DURATION 300
+#define BUZZER_ERROR_DELAY 300
 #define BUZZER_ERROR_BEEP_COUNT 5
 
 // baudrates
@@ -108,7 +109,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 volatile bool turn = false;
 volatile float targetValue = 10;
-volatile int virtualPosition = 0;
+bool automaticModeEnabled = AUTOMODE;
 
 void rotaryISR() {
   static unsigned long lastInterruptTime = 0;
@@ -349,16 +350,17 @@ void updateDisplay() {
   display.print(String(targetValue));
   String status;
   switch (currentState) {
-    case 0: status = "  BEREIT  "; break;
-    case 1: status = "  TARIERE "; break;
-    case 2: status = "  SCHNELL "; break;
-    case 3: status = "  LANGSAM "; break;
-    case 4: status = "  TRICKLE "; break;
-    case 5: status = "  FERTIG  "; break;
-    case 6: status = "  FEHLER  "; break;
-    default: status = "  STATUS? ";
+    case 0: status = " BEREIT  "; break;
+    case 1: status = " TARIERE "; break;
+    case 2: status = " SCHNELL "; break;
+    case 3: status = " LANGSAM "; break;
+    case 4: status = " TRICKLE "; break;
+    case 5: status = " FERTIG  "; break;
+    case 6: status = " FEHLER  "; break;
+    default: status = " STATUS? ";
   }
   display.setTextColor(BLACK, WHITE); // 'inverted' text
+  display.print(automaticModeEnabled ? "A" : " ");
   display.print(status);
   display.setTextColor(WHITE);
   display.display();
@@ -372,7 +374,7 @@ void loop() {
       Serial.println("STATE:IDLE");
       readScaleStableOrUnstable(&value);
 
-      if ((digitalRead(K040_SW) == LOW) || (AUTOMODE && (value < 0.1 && value > -0.1)) ) {
+      if ((digitalRead(K040_SW) == LOW) || (automaticModeEnabled && (value < 0.1 && value > -0.1)) ) {
         currentState = WAIT_FOR_TARE;
         updateDisplay();
         taraScale();
@@ -381,10 +383,12 @@ void loop() {
       break;
     case WAIT_FOR_TARE:
       Serial.println("STATE:WAIT_FOR_TARE");
-      while (readScaleStable(&value) != 1);
+      while (readScaleStable(&value) != 1)
+        updateDisplay();
       if (value == 0.0) {
         startTimestamp = millis();
         currentState = MASSFILL_FAST;
+        updateDisplay();
         driverA.VACTUAL(speedFromValue(value, targetValue));
         if (THROWER_ENABLED) throwPowder();
       }
@@ -432,7 +436,7 @@ void loop() {
       Serial.println("STATE:FINISHED");
       Serial.print("Total time: ");
       Serial.println((millis() - startTimestamp) / 1000);
-      delay(2000);;
+      delay(500);;
       while (readScaleStableOrUnstable(&value) != 1);
       if (value < targetValue + TRICKLE_DELTA) {
         // success
@@ -442,6 +446,7 @@ void loop() {
         currentState = IDLE;
       } else {
         currentState = ERROR;
+        updateDisplay();
 
       }
       break;
@@ -451,10 +456,9 @@ void loop() {
 #ifdef BUZZER_PIN
         tone(BUZZER_PIN, BUZZER_ERROR_FREQ, BUZZER_ERROR_DURATION);
 #endif
-        delay(300);
+        delay(BUZZER_ERROR_DELAY);
       }
-      if (digitalRead(K040_SW) == LOW)
-        currentState = IDLE;
+      currentState = IDLE;
       break;
     default:
       break;
