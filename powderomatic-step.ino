@@ -35,7 +35,7 @@
 #define MOTA_SPEED_MAX 210000
 #define MOTA_SPEED_MIN 15000
 
-#define AUTOMODE false
+#define AUTOMODE true
 
 #define debug 20
 
