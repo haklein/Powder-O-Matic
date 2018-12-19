@@ -1,0 +1,5 @@
+- implement abort on rotary press during trickling ("emergency stop")
+- easy way to toggle automode, maybe via config menu?
+- A&D FX120i support
+- statistics output (over/undershoot, total time, ..) to help with parameter fine tuning?
+- "empty mode" to operate the powder thrower multiple times to get rid of any powder leftovers 
