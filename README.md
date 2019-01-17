@@ -18,3 +18,9 @@ Operation can be seen here: https://youtu.be/FhTphJCxM40
 
 The Autotrickler hardware (trickler and stepper motor adapter for the Lee Powder Thrower)
 can be bought here: https://www.autotrickler.com
+
+While Adam's Autotrickler hardware is the preferred option, you can find a motor adapter 
+for the RCBS Powder Trickler #2 in the designs folder. A pulley for the RCBS pipe and a
+case for the provided PCB layout can also be seen there. The case is ready-to-use for the
+PCB, an SSD1309 1,54" OLED Display, the rotary, two subminiature switches (power and auto
+mode), a DC socket and two G36 4-pin sockets for the stepper motors.
