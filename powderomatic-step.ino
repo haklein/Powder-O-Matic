@@ -41,7 +41,7 @@
 // settings for A&D FX120i
 #elif BALANCE_TYPE == 2
 #define MASSFILL_FAST_DELTA 0.8  // 1.2
-#define MASSFILL_SLOW_DELTA 0.1
+#define MASSFILL_SLOW_DELTA 0.12
 #define TRICKLE_DELTA 0.04
 #define TRICKLE_DELAY 0
 
@@ -51,7 +51,7 @@
 #define MOTA_SPEED_MAX 210000
 #define MOTA_SPEED_MIN 15000
 
-#define AUTOMODE false
+#define AUTOMODE_PIN 35 // set to 0 if no automode switch is connected
 
 #define debug 20
 
@@ -61,7 +61,7 @@
 #define MOTA_ENA 22
 #define MOTA_MSTEPS 256 // 16
 #define MOTA_SERIAL Serial2
-#define MOTA_CURRENT_MA 300
+#define MOTA_CURRENT_MA 500
 
 // thrower stepper setup
 #define MOTB_DIR 27
@@ -90,17 +90,17 @@
 #define CONSOLE_BAUDRATE 115200
 
 // display settings
-#define OLED_RESET -1
+#define OLED_RESET 34 // -1  Set to -1 for 0,96" SSD1306 display. 1.54" SSD1309 needs reset, pin 34 is recommended
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
-#define DISPLAY_I2C_ADDRESS 0x3C
+#define DISPLAY_I2C_ADDRESS 0x3D // 0x3c 0.96" 
 
 // rotary encoder settings
 #define K040_SW 4  // D22, pin 74
 #define K040_DT 3 // D24, pin 72
 #define K040_CLK 2   //  int pin  alt: // D26, pin 70
 
-#define ROTARY_DELTA_VALUE 0.1
+#define ROTARY_DELTA_VALUE -0.1  // change sign to adjust for rotary direction
 #define ROTARY_DEBOUNCE_MILLIS 5
 
 // config section end
@@ -123,7 +123,7 @@ AccelStepper stepperB(AccelStepper::DRIVER, MOTB_STEP, MOTB_DIR);
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 volatile float targetValue = 5;
-bool automaticModeEnabled = AUTOMODE;
+bool automaticModeEnabled = AUTOMODE_PIN != 0 ? true : false;
 
 void rotaryISR() {
   static unsigned long lastInterruptTime = 0;
@@ -146,6 +146,17 @@ void rotaryISR() {
   }
 }
 
+void configMenu() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.setTextColor(BLACK, WHITE); // 'inverted' text
+  display.println("Configuration Setting");
+//display.println("Powder'O'Matic Stp v1");
+  display.display();
+
+  while (true);
+}
 void setup() {
   Serial.begin(CONSOLE_BAUDRATE);
   Serial1.begin(KERN_PCB_BAUDRATE);
@@ -156,6 +167,12 @@ void setup() {
   if (!display.begin(SSD1306_SWITCHCAPVCC, DISPLAY_I2C_ADDRESS)) { // Address 0x3C
     Serial.println("SSD1306 allocation failed");
   }
+
+  if (digitalRead(K040_SW) == LOW) {
+    Serial.println("Setup mode");
+    configMenu();
+  }
+  
   display.clearDisplay();
   display.setTextSize(1);
   display.setCursor(0, 0);
@@ -171,6 +188,8 @@ void setup() {
   pinMode(K040_DT, INPUT_PULLUP);
   pinMode(K040_SW, INPUT_PULLUP);
   pinMode(K040_CLK, INPUT_PULLUP);
+
+  if (AUTOMODE_PIN != 0) pinMode(AUTOMODE_PIN, INPUT_PULLUP);
 
   attachInterrupt(digitalPinToInterrupt(K040_CLK), rotaryISR, LOW);
 
@@ -229,6 +248,9 @@ void setup() {
 
   stepperB.setMaxSpeed(20000000);
   stepperB.setAcceleration(5000);
+
+
+  // setup end
 }
 
 void throwPowder() {
@@ -404,7 +426,7 @@ enum state {
 };
 
 String stateToString(int myState) {
-  switch(myState) {
+  switch (myState) {
     case 0: return "BEREIT";
     case 1: return "TARIERE";
     case 2: return "SCHNELL";
@@ -413,7 +435,7 @@ String stateToString(int myState) {
     case 5: return "FERTIG";
     case 6: return "FEHLER";
     default: return "STATUS?";
-  }  
+  }
 }
 
 state currentState = IDLE;
@@ -426,7 +448,7 @@ void updateDisplay() {
   display.setTextSize(1);
   display.setCursor(0, 0);
   display.setTextColor(BLACK, WHITE); // 'inverted' text
-  display.println("Powder'O'Matic v0.12");
+  display.println("Powder'O'Matic Stp v1");
   display.setCursor(0, 11);
   display.setTextColor(WHITE);
   display.setTextSize(2);
@@ -473,17 +495,17 @@ void loop() {
 
   if (currentState != lastState) {
     Serial.print("State change: ");
-/*    String status;
-    switch (currentState) {
-      case 0: status = " BEREIT  "; break;
-      case 1: status = " TARIERE "; break;
-      case 2: status = " SCHNELL "; break;
-      case 3: status = " LANGSAM "; break;
-      case 4: status = " TRICKLE "; break;
-      case 5: status = " FERTIG  "; break;
-      case 6: status = " FEHLER  "; break;
-      default: status = " STATUS? ";
-    } */
+    /*    String status;
+        switch (currentState) {
+          case 0: status = " BEREIT  "; break;
+          case 1: status = " TARIERE "; break;
+          case 2: status = " SCHNELL "; break;
+          case 3: status = " LANGSAM "; break;
+          case 4: status = " TRICKLE "; break;
+          case 5: status = " FERTIG  "; break;
+          case 6: status = " FEHLER  "; break;
+          default: status = " STATUS? ";
+        } */
     Serial.println(stateToString(currentState));
     lastState = currentState;
   }
@@ -491,7 +513,8 @@ void loop() {
     case IDLE:
       //Serial.println("STATE:IDLE");
       readScaleStableOrUnstable(&value);
-
+      if (AUTOMODE_PIN != 0)
+        automaticModeEnabled = (digitalRead(AUTOMODE_PIN) == LOW) ? true : false;
       if ((digitalRead(K040_SW) == LOW) || (automaticModeEnabled && (value < 0.1 && value > -0.1)) ) {
         currentState = WAIT_FOR_TARE;
         updateDisplay();
@@ -557,6 +580,7 @@ void loop() {
         if (value > targetValue - TRICKLE_DELTA) {
           currentState = FINISHED;
           driverA.VACTUAL((uint32_t) 0);
+
         }
 
       }
