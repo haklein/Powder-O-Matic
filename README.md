@@ -14,7 +14,8 @@ The default values are set up for grain.
 The KY-040 is evaluated by attaching a pin interrupt to the CLK signal (rotaryIsr())
 The Stepper A is being turned via UART commands. Stepper B uses the AccelStep library.
 
-Operation can be seen here: https://youtu.be/FhTphJCxM40
+Operation can be seen here: https://youtu.be/FhTphJCxM40 (prototype with a KERN PCB100-3)
+and here: https://youtu.be/DZrE01YJ6Ys (final version in nice case with A&D FX120i balance)
 
 The Autotrickler hardware (trickler and stepper motor adapter for the Lee Powder Thrower)
 can be bought here: https://www.autotrickler.com
@@ -24,3 +25,5 @@ for the RCBS Powder Trickler #2 in the designs folder. A pulley for the RCBS pip
 case for the provided PCB layout can also be seen there. The case is ready-to-use for the
 PCB, an SSD1309 1,54" OLED Display, the rotary, two subminiature switches (power and auto
 mode), a DC socket and two G36 4-pin sockets for the stepper motors.
+
+A complete BOM can be found here: https://github.com/haklein/Powder-O-Matic/blob/master/BOM.md
