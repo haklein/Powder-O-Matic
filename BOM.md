@@ -13,6 +13,9 @@ Bill of Material
 - pin headers and sockets
 - RS232 ttl level converter, watch out, some of the ebay PCBs run insanely hot and don't work reliable (mostly SMD ones 
   without LED). The ones with MAX232 in DIP and LEDs worked fine for me
+- KY040 rotary encoder
+- SSD1306 display (resp. SSD1309 with 1.5" if you want to use the 3d printed case from the designs folder)
+- two miniature switches for power switch and automatic mode switch
 - DC socket
 - GX16-4 plug and socket for the steppers
 - 3d printed case from the designs folder (perfect fit for the P'o'M PCB)
