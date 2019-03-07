@@ -5,7 +5,8 @@ Bill of Material
 - RobotDyn Mega 2560 PRO (Embed) fitting the P'o'M PCB (or any other Mega 2560 based arduino if you do your own PCB)
 - TMC2208 Board (I'm using the 1.0 from fysetc.com, make sure it's one where you can solder-bridge the NC pin to the
   serial input of the TMC (as that's used on the P'o'M PCB). You need one board for the trickler and one for the thrower.
-- piezzo buzzer (U4) - I'm using a KEPO KPT-G1420A-K8437 
+- piezzo buzzer (U4) - I'm using a KEPO KPT-G1420A-K8437. It's a bit too big for the PCB but still connectable with a bit
+  of tweaking
 - capacitor (220 µF)
 - resistors (R1 + R2) - 1k
 - screw terminalls - Watch the spacing of the PCB, I'm using DECA MA212-350M02 
