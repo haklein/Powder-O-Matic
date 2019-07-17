@@ -5,7 +5,7 @@ Powder'O'Matic Step Readme
 
 This Sketch controls two stepper motors via two TCM2208 stepper drivers. The drivers 
 are controlled via dir/step pins and configured via Serial 2 and 3. Serial 1 is being
-used to fetch values from a Kern PCB scale. The target value is adjusted with a KY-040
+used to fetch values from a the scale. The target value is adjusted with a KY-040
 rotary encoder. Dispensing can be started by pressing the push button of the rotary
 encoder. A SSD1306 OLED display is used to display the current state, actual and target
 value. The Kern scale needs to be configured for command mode ("rE Cr") with 19200 baud. 
@@ -27,3 +27,8 @@ PCB, an SSD1309 1,54" OLED Display, the rotary, two subminiature switches (power
 mode), a DC socket and two G36 4-pin sockets for the stepper motors.
 
 A complete BOM can be found here: https://github.com/haklein/Powder-O-Matic/blob/master/BOM.md
+
+As I've been aksed multiple times, these config settings for the FX120i do work fine for me:
+
+ btPr 2, bPs 5, Prt 3, Spd 20, trc 0, cond 0.
+
