@@ -48,8 +48,8 @@
 #endif
 
 
-#define MOTA_SPEED_MAX 210000
-#define MOTA_SPEED_MIN 15000
+#define MOTA_SPEED_MAX 820 // 210000 / 256
+#define MOTA_SPEED_MIN 59 // 15000 / 256
 
 #define AUTOMODE_PIN 35 // set to 0 if no automode switch is connected
 
@@ -89,11 +89,16 @@
 
 #define CONSOLE_BAUDRATE 115200
 
-// display settings
+// mydisplay settings
 #define OLED_RESET 34 // -1  Set to -1 for 0,96" SSD1306 display. 1.54" SSD1309 needs reset, pin 34 is recommended
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
-#define DISPLAY_I2C_ADDRESS 0x3D // 0x3c 0.96" 
+#define OLED_I2C_ADDRESS 0x3D // 0x3c 0.96" 
+
+#define fontX 5
+#define fontY 9
+#define MAX_DEPTH 3
+/// #define textScale 1
 
 // rotary encoder settings
 #define K040_SW 4  // D22, pin 74
@@ -103,27 +108,83 @@
 #define ROTARY_DELTA_VALUE -0.1  // change sign to adjust for rotary direction
 #define ROTARY_DEBOUNCE_MILLIS 5
 
+#define CONFIG_MAGIC 0xdeadbeef
+#define CONFIG_MIN_VER 1
+#define CONFIG_VER 1
+
 // config section end
 
+#include <EEPROM.h>
+#include <Arduino.h>  // for type definitions
 
+#include <menu.h>
+#include <TimerOne.h>
+
+#include <ClickEncoder.h>
+#include <menuIO/clickEncoderIn.h>
+#include <menuIO/keyIn.h>
+#include <menuIO/chainStream.h>
+#include <menuIO/serialOut.h>
+#include <menuIO/adafruitGfxOut.h>
+#include <menuIO/serialIn.h>
 
 #include <TMC2208Stepper.h>
-TMC2208Stepper driverA = TMC2208Stepper(&MOTA_SERIAL);
-TMC2208Stepper driverB = TMC2208Stepper(&MOTB_SERIAL);
-
 #include <AccelStepper.h>
-// AccelStepper stepperA(AccelStepper::DRIVER, MOTA_STEP, MOTA_DIR);
-AccelStepper stepperB(AccelStepper::DRIVER, MOTB_STEP, MOTB_DIR);
 
 #include <SPI.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+template <class T> int EEPROM_writeAnything(int ee, const T& value)
+{
+  const byte* p = (const byte*)(const void*)&value;
+  unsigned int i;
+  for (i = 0; i < sizeof(value); i++)
+    EEPROM.write(ee++, *p++);
+  return i;
+}
+
+template <class T> int EEPROM_readAnything(int ee, T& value)
+{
+  byte* p = (byte*)(void*)&value;
+  unsigned int i;
+  for (i = 0; i < sizeof(value); i++)
+    *p++ = EEPROM.read(ee++);
+  return i;
+}
+
+struct config_t {
+  long int magic = CONFIG_MAGIC;
+  int confVer = CONFIG_VER;
+  int balanceType = BALANCE_TYPE;
+  int motaCurrent = MOTA_CURRENT_MA;
+  int motaSpeedMax = MOTA_SPEED_MAX;
+  int motaSpeedMin = MOTA_SPEED_MIN;
+  int motaMsteps = MOTA_MSTEPS;
+  int motbCurrent = MOTB_CURRENT_MA;
+  int motbMsteps = MOTB_MSTEPS;
+  bool throwerEnabled = THROWER_ENABLED;
+  int throwerDelay = THROWER_DELAY;
+  int throwerPosition = THROWER_POSITION;
+  float massfillFastDelta = MASSFILL_FAST_DELTA;
+  float massfillSlowDelta = MASSFILL_SLOW_DELTA;
+  float trickleDelta = TRICKLE_DELTA;
+  int trickleDelay = TRICKLE_DELAY;
+} configData;
+
+ClickEncoder clickEncoder(K040_CLK, K040_DT, K040_SW, 4); // last parameter: steps per notch
+ClickEncoderStream encStream(clickEncoder, 1);
+
+TMC2208Stepper driverA = TMC2208Stepper(&MOTA_SERIAL);
+TMC2208Stepper driverB = TMC2208Stepper(&MOTB_SERIAL);
+
+AccelStepper stepperB(AccelStepper::DRIVER, MOTB_STEP, MOTB_DIR);
+
+Adafruit_SSD1306 myDisplay(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 volatile float targetValue = 5;
-bool automaticModeEnabled = AUTOMODE_PIN != 0 ? true : false;
+bool automaticModeEnabled = false; //AUTOMODE_PIN != 0 ? true : false;
 
 void rotaryISR() {
   static unsigned long lastInterruptTime = 0;
@@ -146,16 +207,144 @@ void rotaryISR() {
   }
 }
 
-void configMenu() {
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setCursor(0, 0);
-  display.setTextColor(BLACK, WHITE); // 'inverted' text
-  display.println("Configuration Setting");
-//display.println("Powder'O'Matic Stp v1");
-  display.display();
+void timerIsr() {
+  clickEncoder.service();
+}
 
-  while (true);
+
+const colorDef<uint16_t> colors[] MEMMODE = {
+  {{BLACK, WHITE}, {BLACK, WHITE, WHITE}}, //bgColor
+  {{WHITE, BLACK}, {WHITE, BLACK, BLACK}}, //fgColor
+  {{WHITE, BLACK}, {WHITE, BLACK, BLACK}}, //valColor
+  {{WHITE, BLACK}, {WHITE, BLACK, BLACK}}, //unitColor
+  {{WHITE, BLACK}, {BLACK, BLACK, BLACK}}, //cursorColor
+  {{BLACK, WHITE}, {WHITE, BLACK, BLACK}}, //titleColor
+};
+
+/*
+  const colorDef<uint16_t> colors[] MEMMODE = {
+  {{WHITE, BLACK}, {WHITE, BLACK, BLACK}}, //bgColor
+  {{BLACK, WHITE}, {BLACK, WHITE, WHITE}}, //fgColor
+  {{BLACK, WHITE}, {BLACK, WHITE, WHITE}}, //valColor
+  {{BLACK, WHITE}, {BLACK, WHITE, WHITE}}, //unitColor
+  {{BLACK, WHITE}, {WHITE, WHITE, WHITE}}, //cursorColor
+  {{BLACK, WHITE}, {WHITE, BLACK, BLACK}}, //titleColor
+  };
+*/
+
+result showEvent(eventMask e, navNode& nav, prompt& item) {
+  Serial.print(F("event:"));
+  Serial.print(e);
+  return proceed;
+}
+
+result alert(menuOut& o, idleEvent e);
+result doAlert(eventMask e, prompt &item);
+
+CHOOSE(configData.balanceType, scaleMenu, "Scale", doNothing, noEvent, noStyle
+       , VALUE("Kern PCB 100-3", 1, doNothing, noEvent)
+       , VALUE("A&D FX120i", 2, doNothing, noEvent)
+      );
+
+SELECT(configData.motaMsteps, motamstepMenu, "Trickler MSteps", doNothing, noEvent, noStyle
+       , VALUE("1", 1, doNothing, noEvent)
+       , VALUE("2", 2, doNothing, noEvent)
+       , VALUE("4", 4, doNothing, noEvent)
+       , VALUE("8", 8, doNothing, noEvent)
+       , VALUE("16", 16, doNothing, noEvent)
+       , VALUE("32", 32, doNothing, noEvent)
+       , VALUE("64", 64, doNothing, noEvent)
+       , VALUE("128", 128, doNothing, noEvent)
+       , VALUE("256", 256, doNothing, noEvent)
+      );
+
+SELECT(configData.motbMsteps, motbmstepMenu, "Thrower MSteps", doNothing, noEvent, noStyle
+       , VALUE("1", 1, doNothing, noEvent)
+       , VALUE("2", 2, doNothing, noEvent)
+       , VALUE("4", 4, doNothing, noEvent)
+       , VALUE("8", 8, doNothing, noEvent)
+       , VALUE("16", 16, doNothing, noEvent)
+       , VALUE("32", 32, doNothing, noEvent)
+       , VALUE("64", 64, doNothing, noEvent)
+       , VALUE("128", 128, doNothing, noEvent)
+       , VALUE("256", 256, doNothing, noEvent)
+      );
+
+SELECT(configData.throwerEnabled, throwenaMenu, "Thr. Enabled", doNothing, noEvent, noStyle
+       , VALUE("Yes", true, doNothing, noEvent)
+       , VALUE("No", false, doNothing, noEvent)
+      );
+
+MENU(mainMenu, "Powder'O'Matic Setup", doNothing, noEvent, wrapStyle
+     , SUBMENU(scaleMenu)
+     //     , FIELD(test, "Test", "%", 0, 100, 10, 1, doNothing, noEvent, wrapStyle)
+     , FIELD(configData.motaCurrent, "Trickler Cur", "mA", 100, 2000, 100, 10, doNothing, noEvent, noStyle)
+     , SUBMENU(motamstepMenu)
+     , FIELD(configData.motaSpeedMin, "Tr MinSpd", "", 10, 300, 10, 1, doNothing, noEvent, noStyle)
+     , FIELD(configData.motaSpeedMax, "Tr MaxSpd", "", 100, 1500, 100, 10, doNothing, noEvent, noStyle)
+     , SUBMENU(throwenaMenu)
+     , FIELD(configData.motbCurrent, "Thrower Curr", "mA", 100, 2000, 100, 10, doNothing, noEvent, noStyle)
+     , SUBMENU(motbmstepMenu)
+     , FIELD(configData.throwerDelay, "Thrower Delay", "ms", 0, 1000, 100, 10, doNothing, noEvent, noStyle)
+     , FIELD(configData.throwerPosition, "Thrower Pos", "step", 0, 1000, 100, 10, doNothing, noEvent, noStyle)
+     , FIELD(configData.massfillFastDelta, "Fast Delta", "gr", 0.0, 5, 1, 0.1, doNothing, noEvent, noStyle)
+     , FIELD(configData.massfillSlowDelta, "Slow Delta", "gr", 0.0, 2, 0.1, 0.01, doNothing, noEvent, noStyle)
+     , FIELD(configData.trickleDelta, "Trickle Delta", "gr", 0.0, 0.2, 0.1, 0.01, doNothing, noEvent, noStyle)
+     , FIELD(configData.trickleDelay, "Trickle Delay", "ms", 0, 1000, 100, 10, doNothing, noEvent, noStyle)
+     , OP("<Save", writeEprom, enterEvent)
+     , OP("<Factory defaults", resetEprom, enterEvent)
+     //     , EXIT("<Back")
+    );
+
+
+MENU_INPUTS(in, &encStream);
+
+MENU_OUTPUTS(out, MAX_DEPTH
+             , ADAGFX_OUT(myDisplay, colors, fontX, fontY, {0, 0, SCREEN_WIDTH / fontX, SCREEN_HEIGHT / fontY})
+             , NONE // needs to have two items
+            );
+
+NAVROOT(nav, mainMenu, MAX_DEPTH, in, out);
+
+bool writeEprom() {
+  Serial.println("Writing EEPROM Config data");
+  EEPROM_writeAnything(0, configData);
+  return true;
+}
+
+bool resetEprom() {
+  config_t factoryConfigData;
+  EEPROM_writeAnything(0, factoryConfigData);
+  return true;
+}
+
+void configMenu() {
+
+
+  myDisplay.clearDisplay();
+  myDisplay.setTextSize(1);
+  myDisplay.setCursor(0, 0);
+  myDisplay.setTextColor(BLACK, WHITE); // 'inverted' text
+  myDisplay.println("Powder'O'Matic Stp v1");
+  myDisplay.setCursor(0, 14);
+  myDisplay.setTextColor(WHITE);
+  myDisplay.setTextSize(2);
+  myDisplay.println("Setup..");
+
+  myDisplay.display();
+  myDisplay.setTextSize(1);
+
+  while (digitalRead(K040_SW) == LOW); // wait until button is released to not feed input into nav.doInput()
+  // delay(2000);
+
+  while (true) {
+
+    nav.doInput();
+    if (nav.changed(0)) {//only draw if changed
+      nav.doOutput();
+      myDisplay.display();
+    }
+  }
 }
 void setup() {
   Serial.begin(CONSOLE_BAUDRATE);
@@ -163,27 +352,39 @@ void setup() {
   Serial2.begin(TMC2208_BAUDRATE);
   Serial3.begin(TMC2208_BAUDRATE);
 
+  Serial.println("reading EEPROM config data");
+  EEPROM_readAnything(0, configData);
+  if ((configData.magic != CONFIG_MAGIC) || (configData.confVer < CONFIG_MIN_VER)) {
+    Serial.println("ERROR, invalid EEPROM config data, writing default config");
+    config_t newConfigData;
+    EEPROM_writeAnything(0, newConfigData);
+    configData = newConfigData;
+    Serial.print("initialized EEPROM config data to default values, version: ");
+    Serial.println(configData.confVer);
+    delay(100);
+
+  } else {
+    Serial.print("EEPROM config valid, version: ");
+    Serial.println(configData.confVer);
+  }
+
+
   Serial.println("Powder'O'Matic Step startup...");
-  if (!display.begin(SSD1306_SWITCHCAPVCC, DISPLAY_I2C_ADDRESS)) { // Address 0x3C
+  if (!myDisplay.begin(SSD1306_SWITCHCAPVCC, OLED_I2C_ADDRESS)) { // Address 0x3C
     Serial.println("SSD1306 allocation failed");
   }
 
-  if (digitalRead(K040_SW) == LOW) {
-    Serial.println("Setup mode");
-    configMenu();
-  }
-  
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setCursor(0, 0);
-  display.setTextColor(BLACK, WHITE); // 'inverted' text
-  display.println("Powder'O'Matic Stp v1");
-  display.setCursor(0, 14);
-  display.setTextColor(WHITE);
-  display.setTextSize(2);
-  display.println("Start..");
+  myDisplay.clearDisplay();
+  myDisplay.setTextSize(1);
+  myDisplay.setCursor(0, 0);
+  myDisplay.setTextColor(BLACK, WHITE); // 'inverted' text
+  myDisplay.println("Powder'O'Matic Stp v1");
+  myDisplay.setCursor(0, 14);
+  myDisplay.setTextColor(WHITE);
+  myDisplay.setTextSize(2);
+  myDisplay.println("Start..");
 
-  display.display();
+  myDisplay.display();
 
   pinMode(K040_DT, INPUT_PULLUP);
   pinMode(K040_SW, INPUT_PULLUP);
@@ -191,7 +392,7 @@ void setup() {
 
   if (AUTOMODE_PIN != 0) pinMode(AUTOMODE_PIN, INPUT_PULLUP);
 
-  attachInterrupt(digitalPinToInterrupt(K040_CLK), rotaryISR, LOW);
+  // attachInterrupt(digitalPinToInterrupt(K040_CLK), rotaryISR, LOW);
 
   driverA.push();
   driverB.push();                // Reset registers
@@ -214,21 +415,21 @@ void setup() {
 
   driverA.pdn_disable(true);     // Use PDN/UART pin for communication
   driverA.I_scale_analog(true); // Use internal voltage reference
-  driverA.rms_current(MOTA_CURRENT_MA);      // Set driver current 500mA
+  driverA.rms_current(configData.motaCurrent);      // Set driver current 500mA
   // driverB.en_spreadCycle(1);
   driverA.toff(2);               // Enable driver in software
   driverA.mstep_reg_select(true); // ignore MS1 + MS2
-  driverA.microsteps(MOTA_MSTEPS);
+  driverA.microsteps(configData.motaMsteps);
   driverA.ihold(0);
   digitalWrite(MOTA_DIR, LOW);
 
   driverB.pdn_disable(true);     // Use PDN/UART pin for communication
   driverB.I_scale_analog(true); // Use internal voltage reference
-  driverB.rms_current(MOTB_CURRENT_MA);      // Set driver current 500mA
+  driverB.rms_current(configData.motbCurrent);      // Set driver current 500mA
   // driverB.en_spreadCycle(1);
   driverB.toff(2);               // Enable driver in software
   driverB.mstep_reg_select(true); // ignore MS1 + MS2
-  driverB.microsteps(MOTB_MSTEPS);
+  driverB.microsteps(configData.motbMsteps);
   driverB.ihold(0);
 
 
@@ -250,39 +451,51 @@ void setup() {
   stepperB.setAcceleration(5000);
 
 
+  Timer1.initialize(1000);
+  Timer1.attachInterrupt(timerIsr);
   // setup end
+
+  if (digitalRead(K040_SW) == LOW) {
+    Serial.println("Setup mode");
+    configMenu();
+  }
+
+  clickEncoder.setAccelerationEnabled(true);
 }
 
 void throwPowder() {
-  stepperB.moveTo(THROWER_POSITION * MOTB_MSTEPS);
-  stepperB.runToPosition();
-  delay(THROWER_DELAY);
-  stepperB.moveTo(0 * MOTB_MSTEPS);
-  stepperB.runToPosition();
-
+  if (configData.throwerEnabled) {
+    stepperB.moveTo(configData.throwerPosition * configData.motbMsteps);
+    stepperB.runToPosition();
+    delay(configData.throwerDelay);
+    stepperB.moveTo(0 * configData.motbMsteps);
+    stepperB.runToPosition();
+  }
 }
 
 // derive motor speed from value
 uint32_t speedFromValue(float currentValue, float targetValue) {
   float delta = targetValue - currentValue;
-  if (delta > MASSFILL_FAST_DELTA) {
-    Serial.println("MAX Speed");
-    return MOTA_SPEED_MAX;
+  if (delta > configData.massfillFastDelta) {
+    Serial.print("MAX Speed: ");
+    Serial.println((uint32_t) configData.motaSpeedMax * configData.motaMsteps);
+    return (uint32_t) configData.motaSpeedMax * configData.motaMsteps;
   }
-  if (delta < MASSFILL_SLOW_DELTA) {
+  if (delta < configData.massfillSlowDelta) {
     Serial.println("MIN Speed");
-    return MOTA_SPEED_MIN;
+    return configData.motaSpeedMin * configData.motaMsteps;
   }
-  uint32_t newSpeed = map(delta * 10, MASSFILL_SLOW_DELTA * 10, MASSFILL_FAST_DELTA * 10, MOTA_SPEED_MIN, MOTA_SPEED_MAX);
+  uint32_t newSpeed = map(delta * 10, configData.massfillSlowDelta * 10,
+                          configData.massfillFastDelta * 10, configData.motaSpeedMin, configData.motaSpeedMax);
   Serial.print("Speed: ");
-  Serial.println(newSpeed);
-  return newSpeed;
+  Serial.println(newSpeed * configData.motaMsteps);
+  return newSpeed * configData.motaMsteps;
 }
 
 // method to read a value from the serially attached KERN scale
 int readScale(float *returnValue) {
   if (debug > 39) Serial.println("read scale");
-  if (BALANCE_TYPE ==  1) {
+  if (configData.balanceType ==  1) {
     Serial1.write("w");
     Serial1.flush();
     delay(300);
@@ -399,7 +612,7 @@ int readScaleStable(float * returnValue) {
 
 // tara the scale
 void taraScale() {
-  if (BALANCE_TYPE == 1) { // KERN PCB
+  if (configData.balanceType == 1) { // KERN PCB
     while (Serial1.available()) Serial1.read();
     Serial.println("Tara scale");
     Serial1.write("t");
@@ -443,21 +656,21 @@ state lastState = IDLE;
 float value = -1.0;
 
 void updateDisplay() {
-  //Serial.println("update display start");
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setCursor(0, 0);
-  display.setTextColor(BLACK, WHITE); // 'inverted' text
-  display.println("Powder'O'Matic Stp v1");
-  display.setCursor(0, 11);
-  display.setTextColor(WHITE);
-  display.setTextSize(2);
-  display.print("I:");
-  for (int i = 0; i < (8 - String(value).length()); i++) display.print(" ");
-  display.print(String(value));
-  display.print("S:");
-  for (int i = 0; i < (8 - String(targetValue).length()); i++) display.print(" ");
-  display.print(String(targetValue));
+  //Serial.println("update gfx start");
+  myDisplay.clearDisplay();
+  myDisplay.setTextSize(1);
+  myDisplay.setCursor(0, 0);
+  myDisplay.setTextColor(BLACK, WHITE); // 'inverted' text
+  myDisplay.println("Powder'O'Matic Stp v1");
+  myDisplay.setCursor(0, 11);
+  myDisplay.setTextColor(WHITE);
+  myDisplay.setTextSize(2);
+  myDisplay.print("I:");
+  for (int i = 0; i < (8 - String(value).length()); i++) myDisplay.print(" ");
+  myDisplay.print(String(value));
+  myDisplay.print("S:");
+  for (int i = 0; i < (8 - String(targetValue).length()); i++) myDisplay.print(" ");
+  myDisplay.print(String(targetValue));
   String status;
   switch (currentState) {
     case 0: status = " BEREIT  "; break;
@@ -469,49 +682,26 @@ void updateDisplay() {
     case 6: status = " FEHLER  "; break;
     default: status = " STATUS? ";
   }
-  display.setTextColor(BLACK, WHITE); // 'inverted' text
-  display.print(automaticModeEnabled ? "A" : " ");
-  display.print(status);
-  display.setTextColor(WHITE);
-  display.display();
-  // Serial.println("update display end");
+  myDisplay.setTextColor(BLACK, WHITE); // 'inverted' text
+  myDisplay.print(automaticModeEnabled ? "A" : " ");
+  myDisplay.print(status);
+  myDisplay.setTextColor(WHITE);
+  myDisplay.display();
+  // Serial.println("update gfx end");
 }
 unsigned long startTimestamp;
 
 void loop() {
-  // #define TESTMODE 1
 
-#ifdef TESTMODE
-  driverA.VACTUAL(speedFromValue(5, 50));
-  while (true) {
-    Serial.println("throw");
-    throwPowder();
-    Serial.println("sleep");
-    tone(BUZZER_PIN, BUZZER_SUCCESS_FREQ, BUZZER_SUCCESS_DURATION);
-
-    delay(3000);
-  }
-#endif
+  targetValue += clickEncoder.getValue() / 10.0;
 
   if (currentState != lastState) {
     Serial.print("State change: ");
-    /*    String status;
-        switch (currentState) {
-          case 0: status = " BEREIT  "; break;
-          case 1: status = " TARIERE "; break;
-          case 2: status = " SCHNELL "; break;
-          case 3: status = " LANGSAM "; break;
-          case 4: status = " TRICKLE "; break;
-          case 5: status = " FERTIG  "; break;
-          case 6: status = " FEHLER  "; break;
-          default: status = " STATUS? ";
-        } */
     Serial.println(stateToString(currentState));
     lastState = currentState;
   }
   switch (currentState) {
     case IDLE:
-      //Serial.println("STATE:IDLE");
       readScaleStableOrUnstable(&value);
       if (AUTOMODE_PIN != 0)
         automaticModeEnabled = (digitalRead(AUTOMODE_PIN) == LOW) ? true : false;
@@ -523,7 +713,6 @@ void loop() {
 
       break;
     case WAIT_FOR_TARE:
-      //Serial.println("STATE:WAIT_FOR_TARE");
       while (readScaleStable(&value) != 1)
         updateDisplay();
       if (value == 0.0) {
@@ -531,38 +720,35 @@ void loop() {
         currentState = MASSFILL_FAST;
         updateDisplay();
         driverA.VACTUAL(speedFromValue(value, targetValue));
-        if (THROWER_ENABLED) throwPowder();
+        if (configData.throwerEnabled) throwPowder();
       }
       break;
     case MASSFILL_FAST:
-      //Serial.println("STATE:MASSFILL_FAST");
       if (readScaleStableOrUnstable(&value) != -1) {
         /*
                 Serial.print("Value: ");
                 Serial.println(value);
         */
-        if (value > targetValue - MASSFILL_FAST_DELTA) {
+        if (value > targetValue - configData.massfillFastDelta) {
           currentState = MASSFILL_SLOW;
           driverA.VACTUAL(speedFromValue(value, targetValue));
         }
       }
       break;
     case MASSFILL_SLOW:
-      //Serial.println("STATE:MASSFILL_SLOW");
       if (readScaleStableOrUnstable(&value) != -1) {
         driverA.VACTUAL(speedFromValue(value, targetValue));
-        if (value > targetValue - MASSFILL_SLOW_DELTA) {
+        if (value > targetValue - configData.massfillSlowDelta) {
           currentState = TRICKLE;
-          if (BALANCE_TYPE == 1) // give the kern pcb some time to get stable
+          if (configData.balanceType == 1) // give the kern pcb some time to get stable in next state
             driverA.VACTUAL((uint32_t) 0);
         }
       }
       break;
     case TRICKLE:
-      //Serial.println("STATE:TRICKLE");
-      if (BALANCE_TYPE == 1) {
+      if (configData.balanceType == 1) {
         if (readScaleStableOrUnstable(&value) == 1) {
-          if (value > targetValue - TRICKLE_DELTA) {
+          if (value > targetValue - configData.trickleDelta) {
             currentState = FINISHED;
             driverA.VACTUAL((uint32_t) 0);
           } else {
@@ -572,12 +758,12 @@ void loop() {
         } else {
           Serial.println("no stable");
           driverA.VACTUAL((uint32_t) 0);
-          delay(TRICKLE_DELAY);
+          delay(configData.trickleDelay);
         }
       } else {
         // A&D FX120i
         readScaleStableOrUnstable(&value);
-        if (value > targetValue - TRICKLE_DELTA) {
+        if (value > targetValue - configData.trickleDelta) {
           currentState = FINISHED;
           driverA.VACTUAL((uint32_t) 0);
 
@@ -592,7 +778,7 @@ void loop() {
       Serial.println((millis() - startTimestamp) / 1000);
       delay(500);;
       while (readScaleStableOrUnstable(&value) != 1);
-      if (value < targetValue + TRICKLE_DELTA) {
+      if (abs(value  - targetValue) < configData.trickleDelta) {
         // success
 #ifdef BUZZER_PIN
         tone(BUZZER_PIN, BUZZER_SUCCESS_FREQ, BUZZER_SUCCESS_DURATION);
