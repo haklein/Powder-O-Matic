@@ -32,3 +32,15 @@ As I've been aksed multiple times, these config settings for the FX120i do work 
 
  btPr 2, bPs 5, Prt 3, Spd 20, trc 0, cond 0.
 
+## Requirements
+
+### Arduino libraries
+
+- ArduinoMenu library
+- TimerOne
+- ClickEncoder - https://github.com/0xPIT/encoder
+- Adafruit GFX Library
+- TMC2208Stepper
+- AccelStepper
+- Adafruit SSD1306
+
