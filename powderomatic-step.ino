@@ -662,11 +662,16 @@ void taraScale() {
     Serial1.write("t");
     Serial1.flush();
     delay(2500);
-  } else {  // A&D FX120i
+  } else  if (configData.balanceType == 2) {  // A&D FX120i
     // T - Tare, Z - ReZero,
     Serial1.write("Z\r\n");
     Serial1.flush();
     // delay(500);
+
+  } else {
+    Serial.println("Tara scale");
+    Serial1.write("T\r\n");
+    Serial1.flush();
 
   }
 
