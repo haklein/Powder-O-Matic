@@ -213,7 +213,7 @@ void timerIsr() {
 }
 
 
-const colorDef<uint16_t> colors[] MEMMODE = {
+const colorDef<uint16_t> colors[]  = {
   {{BLACK, WHITE}, {BLACK, WHITE, WHITE}}, //bgColor
   {{WHITE, BLACK}, {WHITE, BLACK, BLACK}}, //fgColor
   {{WHITE, BLACK}, {WHITE, BLACK, BLACK}}, //valColor
