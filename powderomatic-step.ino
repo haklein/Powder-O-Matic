@@ -28,6 +28,7 @@
 
 // #define BALANCE_TYPE 1 // kern PCB 100-3
 // #define BALANCE_TYPE 2 // A&D FX120i
+// #define BALANCE_TYPE 3 // Sartorius
 #define BALANCE_TYPE 2
 
 // settings for Kern PCB
@@ -244,6 +245,7 @@ result doAlert(eventMask e, prompt &item);
 CHOOSE(configData.balanceType, scaleMenu, "Scale", doNothing, noEvent, noStyle
        , VALUE("Kern PCB 100-3", 1, doNothing, noEvent)
        , VALUE("A&D FX120i", 2, doNothing, noEvent)
+       , VALUE("Sartorius", 3, doNothing, noEvent)
       );
 
 SELECT(configData.motaMsteps, motamstepMenu, "Trickler MSteps", doNothing, noEvent, noStyle
@@ -532,7 +534,7 @@ int readScale(float *returnValue) {
       if (debug > 39) Serial.println("no data from scale");
       return -1;
     }
-  } else { // A&D FX120i
+  } else if (configData.balanceType == 2) { // A&D FX120i
     Serial1.write("Q\r\n");
     delay(50);
     if (Serial1.available()) {
@@ -574,7 +576,49 @@ int readScale(float *returnValue) {
       if (debug > 39) Serial.println("no data from scale");
       return -1;
     }
-  }
+  } else { // Sartorius
+    if (Serial1.available()) {
+      //Serial.println("data available");
+      bool negative = false;
+      bool stable = false;
+      String scaleOutput = Serial1.readStringUntil('\n');
+      if (debug > 29) {
+        Serial.print("SCALE OUTPUT:");
+        Serial.println(scaleOutput);
+        Serial.println(scaleOutput.indexOf("."));
+      }
+      if ((scaleOutput.indexOf(".") != -1)) { // value from scale contains '.', so probably a good value
+        if (scaleOutput.indexOf('[') == -1) { // uncertain digits would be enclosed by [ ]
+          //Serial.println("stable");
+          stable = true;
+        }
+        if (scaleOutput.indexOf('-') != -1) {
+          negative = true;
+        }
+        String valueString = scaleOutput.substring(1, 10);
+        if (debug > 39) {
+          Serial.println(valueString);
+
+        }
+        valueString.trim();
+        float value = valueString.toFloat();
+        if (negative) value = value * -1;
+        if (debug > 29) Serial.print("Float: ");
+        if (debug > 29) Serial.println(value, 3);
+        *returnValue = value;
+        if (stable) return 1;
+        return 0;
+      } else {
+        return -1;
+      }
+
+    } else {
+      if (debug > 39) Serial.println("no data from scale");
+      return -1;
+    }
+
+
+  } 
   // wrong scale configuration
   return -1;
 }
