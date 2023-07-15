@@ -246,6 +246,7 @@ CHOOSE(configData.balanceType, scaleMenu, "Scale", doNothing, noEvent, noStyle
        , VALUE("Kern PCB 100-3", 1, doNothing, noEvent)
        , VALUE("A&D FX120i", 2, doNothing, noEvent)
        , VALUE("Sartorius", 3, doNothing, noEvent)
+       , VALUE("Ohaus Scout 123", 4, doNothing, noEvent)
       );
 
 SELECT(configData.motaMsteps, motamstepMenu, "Trickler MSteps", doNothing, noEvent, noStyle
@@ -576,7 +577,7 @@ int readScale(float *returnValue) {
       if (debug > 39) Serial.println("no data from scale");
       return -1;
     }
-  } else { // Sartorius
+  } else if (configData.balanceType == 3) { // Sartorius
     if (Serial1.available()) {
       //Serial.println("data available");
       bool negative = false;
@@ -601,6 +602,49 @@ int readScale(float *returnValue) {
 
         }
         valueString.trim();
+        float value = valueString.toFloat();
+        if (negative) value = value * -1;
+        if (debug > 29) Serial.print("Float: ");
+        if (debug > 29) Serial.println(value, 3);
+        *returnValue = value;
+        if (stable) return 1;
+        return 0;
+      } else {
+        return -1;
+      }
+
+    } else {
+      if (debug > 39) Serial.println("no data from scale");
+      return -1;
+    }
+
+
+  } else { // Ohaus
+    if (Serial1.available()) {
+      //Serial.println("data available");
+      bool negative = false;
+      bool stable = false;
+      String scaleOutput = Serial1.readStringUntil('\n');
+      if (debug > 29) {
+        Serial.print("SCALE OUTPUT:");
+        Serial.println(scaleOutput);
+        Serial.println(scaleOutput.indexOf("."));
+      }
+      if ((scaleOutput.indexOf('.') == 8) || (scaleOutput.indexOf('.') == 9)) {
+        
+        if (scaleOutput.indexOf('?') == -1) { // ? is present when unstable
+          //Serial.println("stable");
+          stable = true;
+        }
+        if (scaleOutput.indexOf('-') != -1) {
+          negative = true;
+        }
+
+        String valueString = scaleOutput.substring(0, 11).trim();
+        if (debug > 39) {
+          Serial.println(valueString);
+
+        }
         float value = valueString.toFloat();
         if (negative) value = value * -1;
         if (debug > 29) Serial.print("Float: ");
